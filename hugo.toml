@@ -1,0 +1,13 @@
+baseURL = "https://yutamoty.com/"
+languageCode = "ja"
+title = "yutamoty.com"
+theme = "yutamoty"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+
+[params]
+  author = "Yuta MOCHIZUKI"
+  description = "yutamoty.com"
