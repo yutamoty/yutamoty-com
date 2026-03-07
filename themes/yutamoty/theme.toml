@@ -1,0 +1,6 @@
+name = "yutamoty"
+license = "MIT"
+description = "Custom theme for yutamoty.com"
+
+[author]
+  name = "Yuta MOCHIZUKI"
