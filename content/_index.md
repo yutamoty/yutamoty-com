@@ -17,6 +17,10 @@ title: "yutamoty.com"
 
 more...
 
+## Tools
+
+- [京都の通り名](/tools/kyoto-street/)
+
 ## Contact
 
 - Mail: send[at]mail.yutamoty.com
