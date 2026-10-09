@@ -256,6 +256,15 @@ def process(elements, bounds):
     return streets, rejected
 
 
+def default_output():
+    """スクリプトがリポジトリの中にあれば、実行した場所に関係なくサイトの置き場所へ出す。
+    ダウンロードしたスクリプトを単体で動かすときは、実行した場所に streets.json を出す。"""
+    repo = Path(__file__).resolve().parents[2]
+    if (repo / "hugo.toml").exists():
+        return str(repo / "static" / "tools" / "kyoto-street" / "streets.json")
+    return str(Path.cwd() / "streets.json")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--north", type=float, default=35.031, help="北端の緯度(既定: 今出川通のすこし北)")
@@ -263,7 +272,7 @@ def main():
     ap.add_argument("--west", type=float, default=135.730, help="西端の経度(既定: 西大路通あたり)")
     ap.add_argument("--east", type=float, default=135.774, help="東端の経度(既定: 鴨川・川端通あたり)")
     ap.add_argument("--input", help="取得済みの Overpass 応答(JSON)。指定すると通信しない")
-    ap.add_argument("--output", default="static/tools/kyoto-street/streets.json")
+    ap.add_argument("--output", default=default_output(), help="出力先(既定: リポジトリ内なら static/tools/kyoto-street/streets.json、それ以外は実行した場所の streets.json)")
     ap.add_argument("--rows", type=int, default=4, help="範囲を南北に分ける数(既定: 4)")
     ap.add_argument("--cols", type=int, default=3, help="範囲を東西に分ける数(既定: 3)")
     ap.add_argument("--endpoint", action="append", help="Overpass の接続先(複数指定可)。省略すると既定の候補を順に使う")
@@ -274,6 +283,9 @@ def main():
     args = ap.parse_args()
 
     bounds = (args.south, args.west, args.north, args.east)
+    out = Path(args.output).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)  # 取得してから書けないと分かるのを避ける
+    print("出力先: %s" % out, file=sys.stderr)
     if args.input:
         with open(args.input, encoding="utf-8") as f:
             data = json.load(f)
@@ -289,13 +301,13 @@ def main():
         "attribution": "© OpenStreetMap contributors (ODbL)",
         "streets": [{"n": k, "w": v} for k, v in sorted(streets.items())],
     }
-    with open(args.output, "w", encoding="utf-8") as f:
+    with open(out, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
 
     size = len(json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     ways = sum(len(v) for v in streets.values())
     pts = sum(len(x) // 2 for v in streets.values() for x in v)
-    print("通り %d 種 / 折れ線 %d 本 / 点 %d 個 / %.0f KB → %s" % (len(streets), ways, pts, size / 1024, args.output), file=sys.stderr)
+    print("通り %d 種 / 折れ線 %d 本 / 点 %d 個 / %.0f KB → %s" % (len(streets), ways, pts, size / 1024, out), file=sys.stderr)
 
     if rejected:
         print("\n名前に「通/小路/大路」を含むが、通りとして採用しなかった道路(表記ゆれの確認用):", file=sys.stderr)
