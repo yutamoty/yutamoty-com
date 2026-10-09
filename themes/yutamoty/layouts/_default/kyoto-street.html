@@ -2,6 +2,7 @@
 <h1 class="page-title">{{ .Title }}</h1>
 {{ .Content }}
 
+<link rel="stylesheet" href="{{ "tools/kyoto-street/leaflet/leaflet.css" | relURL }}">
 <div id="street-app" data-src="{{ "tools/kyoto-street/streets.json" | relURL }}">
   <section class="street-card">
     <p class="street-label" id="status">現在地を調べています…</p>
@@ -10,6 +11,13 @@
     <div id="alts"></div>
     <p class="street-warn" id="warn"></p>
   </section>
+
+  <div id="street-map" class="street-map" role="application" aria-label="通り名を調べる地図。タップするとその場所の通り名を表示します"></div>
+  <p class="street-legend">
+    <span class="street-dot street-dot-ns"></span>南北の通り
+    <span class="street-dot street-dot-ew"></span>東西の通り
+    <span class="street-legend-note">点線の内側が対応範囲</span>
+  </p>
 
   <div class="street-buttons">
     <button type="button" class="street-btn" id="btn-locate">もう一度調べる</button>
@@ -32,8 +40,9 @@
   </details>
 
   <p class="street-note">
-    地図データ © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>(ODbL)。通り名の判定は試作で、路地や洛外では不正確なことがあります。
+    通りのデータ © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>(ODbL)。地図の背景は<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>(国土地理院)。通り名の判定は試作で、路地や洛外では不正確なことがあります。
   </p>
 </div>
+<script src="{{ "tools/kyoto-street/leaflet/leaflet.js" | relURL }}"></script>
 <script src="{{ "tools/kyoto-street/kyoto-street.js" | relURL }}"></script>
 {{ end }}

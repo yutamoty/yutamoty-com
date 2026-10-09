@@ -318,3 +318,68 @@ body {
   color: inherit;
   text-decoration: underline;
 }
+
+.street-map {
+  height: 320px;
+  margin: 1rem 0 0.5rem;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  z-index: 0;
+}
+
+.street-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  margin-bottom: 1rem;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.street-legend-note {
+  color: #999;
+}
+
+.street-dot {
+  display: inline-block;
+  width: 1.4rem;
+  height: 4px;
+  margin-right: 0.3rem;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.street-dot-ns {
+  background: #0969da;
+}
+
+.street-dot-ew {
+  background: #cf222e;
+}
+
+.street-pin-wrap {
+  background: none;
+  border: none;
+}
+
+.street-pin {
+  width: 24px;
+  height: 24px;
+  border-radius: 50% 50% 50% 0;
+  background: #111;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transform: rotate(-45deg);
+}
+
+.street-pin::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}

@@ -139,6 +139,72 @@ if (typeof document !== 'undefined') {
   const inBounds = (lat, lon) =>
     lat >= bounds[0] && lon >= bounds[1] && lat <= bounds[2] && lon <= bounds[3];
 
+  /* ===== 地図(Leaflet + 地理院タイル) ===== */
+  const DEFAULT_CENTER = [35.01177, 135.76830]; // 京都市役所前あたり
+  const LINE_COLORS = { NS: '#0969da', EW: '#cf222e' };
+  let map = null, pin = null, accCircle = null, lines = null;
+
+  // 判定用のローカル座標(x=東, y=北, m)を緯度経度に戻す
+  const unproj = (x, y, lat0, lon0) =>
+    [lat0 + y / R_LAT, lon0 + x / (Math.cos(lat0 * Math.PI / 180) * R_LON)];
+
+  function initMap() {
+    if (typeof L === 'undefined') { $('street-map').hidden = true; return; } // 地図が読めなくても通り名は出す
+    map = L.map('street-map').setView(DEFAULT_CENTER, 15);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>',
+      minZoom: 12, maxNativeZoom: 18, maxZoom: 19
+    }).addTo(map);
+    lines = L.layerGroup().addTo(map);
+    map.on('click', e => { setPin(e.latlng.lat, e.latlng.lng); run(e.latlng.lat, e.latlng.lng, null, true); });
+  }
+
+  // データの範囲を地図に重ねる(この外は「碁盤の目の外」)
+  function initDataLayers() {
+    if (!map) return;
+    L.rectangle([[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
+      { color: '#999', weight: 1, dashArray: '4 4', fill: false, interactive: false }).addTo(map);
+    map.setMaxBounds(L.latLngBounds([bounds[0], bounds[1]], [bounds[2], bounds[3]]).pad(0.5));
+  }
+
+  function setPin(lat, lon) {
+    if (pin) { pin.setLatLng([lat, lon]); return; }
+    pin = L.marker([lat, lon], {
+      draggable: true, title: 'ドラッグして場所を動かせます',
+      icon: L.divIcon({ className: 'street-pin-wrap', html: '<div class="street-pin"></div>', iconSize: [24, 24], iconAnchor: [12, 29] })
+    }).addTo(map);
+    let queued = false;
+    pin.on('drag', () => { // ドラッグ中も結果を追従させる(描画は1フレームに1回)
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; const c = pin.getLatLng(); run(c.lat, c.lng, null, true); });
+    });
+    pin.on('dragend', () => { const c = pin.getLatLng(); run(c.lat, c.lng, null, true); });
+  }
+
+  // 判定結果を地図に反映する(ピン・誤差の円・判定に使った2本の通り)
+  function showOnMap(r, list, lat, lon, acc, fromMap) {
+    if (!map) return;
+    if (!fromMap && inBounds(lat, lon)) {
+      const first = !pin;
+      setPin(lat, lon);
+      map.setView([lat, lon], first ? 17 : map.getZoom());
+    }
+    if (accCircle) { map.removeLayer(accCircle); accCircle = null; }
+    if (acc && !fromMap && inBounds(lat, lon)) {
+      accCircle = L.circle([lat, lon], { radius: acc, color: '#0969da', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
+    }
+    lines.clearLayers();
+    if (!r.ok) return;
+    for (const it of r.items) {
+      const st = list.find(x => x.name === it.street && x.orient === it.orient);
+      if (!st) continue;
+      L.polyline(st.segs.map(([ax, ay, bx, by]) => [unproj(ax, ay, lat, lon), unproj(bx, by, lat, lon)]),
+        { color: LINE_COLORS[it.orient], weight: 5, opacity: 0.75 })
+        .bindTooltip(it.street, { sticky: true }).addTo(lines);
+    }
+  }
+
   function render(r, lat, lon, acc) {
     $('alts').innerHTML = '';
     $('warn').textContent = '';
@@ -166,7 +232,7 @@ if (typeof document !== 'undefined') {
     else if (acc && acc > 50) $('warn').textContent = '位置の誤差が大きいため、通り名がずれる可能性があります。';
   }
 
-  async function run(lat, lon, acc) {
+  async function run(lat, lon, acc, fromMap) {
     $('status').textContent = '通りを調べています…';
     try {
       await loadData();
@@ -177,8 +243,11 @@ if (typeof document !== 'undefined') {
       $('alts').innerHTML = '';
       return;
     }
-    const r = inBounds(lat, lon) ? analyze(buildStreets(ways, lat, lon)) : { ok: false, outside: true };
+    const inside = inBounds(lat, lon);
+    const list = inside ? buildStreets(ways, lat, lon) : null;
+    const r = inside ? analyze(list) : { ok: false, outside: true };
     render(r, lat, lon, acc);
+    showOnMap(r, list, lat, lon, acc, fromMap);
   }
 
   function locate() {
@@ -190,7 +259,7 @@ if (typeof document !== 'undefined') {
       err => {
         $('status').textContent = '位置情報を取得できませんでした(' + err.message + ')';
         $('main-text').textContent = '—';
-        $('main-sub').textContent = err.code === 1 ? '位置情報の許可が必要です。ブラウザの設定で許可してから「もう一度調べる」を押してください。' : '「もう一度調べる」を押すと再試行します。';
+        $('main-sub').textContent = err.code === 1 ? '位置情報の許可が必要です。ブラウザの設定で許可してから「もう一度調べる」を押すか、地図をタップして場所を指定してください。' : '「もう一度調べる」を押すと再試行します。地図をタップして場所を指定することもできます。';
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
@@ -211,7 +280,8 @@ if (typeof document !== 'undefined') {
     { enableHighAccuracy: true });
   }
 
-  loadData().catch(() => {}); // 先に読み込んでおく(失敗は run() 側で表示)
+  initMap();
+  loadData().then(initDataLayers).catch(() => {}); // 先に読み込んでおく(失敗は run() 側で表示)
   $('btn-locate').onclick = locate;
   locate(); // アクセスしたらすぐ現在地を調べる
   $('btn-watch').onclick = toggleWatch;
