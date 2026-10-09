@@ -34,14 +34,14 @@
   <h1>京都の通り名</h1>
 
   <div class="card">
-    <div class="label" id="status">「現在地を調べる」を押してください</div>
+    <div class="label" id="status">現在地を調べています…</div>
     <div id="main-text">—</div>
     <div class="sub" id="main-sub"></div>
     <div id="alts"></div>
     <div class="warn" id="warn"></div>
   </div>
 
-  <button id="btn-locate">現在地を調べる</button>
+  <button id="btn-locate">もう一度調べる</button>
   <button id="btn-watch" class="ghost">歩きながら自動更新する</button>
 
   <div class="card" style="margin-top:16px">
@@ -256,7 +256,11 @@ if (typeof document !== 'undefined') {
     $('status').textContent = '位置情報を取得しています…';
     navigator.geolocation.getCurrentPosition(
       p => run(p.coords.latitude, p.coords.longitude, p.coords.accuracy),
-      err => { $('status').textContent = '位置情報を取得できませんでした(' + err.message + ')'; },
+      err => {
+        $('status').textContent = '位置情報を取得できませんでした(' + err.message + ')';
+        $('main-text').textContent = '—';
+        $('main-sub').textContent = err.code === 1 ? '位置情報の許可が必要です。ブラウザの設定で許可してから「もう一度調べる」を押してください。' : '「もう一度調べる」を押すと再試行します。';
+      },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
   }
@@ -278,6 +282,7 @@ if (typeof document !== 'undefined') {
 
   loadData().catch(() => {}); // 先に読み込んでおく(失敗は run() 側で表示)
   $('btn-locate').onclick = locate;
+  locate(); // アクセスしたらすぐ現在地を調べる
   $('btn-watch').onclick = toggleWatch;
   $('presets').onchange = e => {
     if (!e.target.value) return;
