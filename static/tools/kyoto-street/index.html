@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>京都の通り名</title>
+<style>
+  :root { --bg:#faf8f4; --fg:#2b2622; --sub:#7a6f66; --card:#fff; --line:#e4ddd3; --accent:#9a2f2f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1a18; --fg:#ece6dd; --sub:#9b9188; --card:#262320; --line:#3a3530; --accent:#e07b73; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; line-height:1.6; }
+  main { max-width:560px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:1.1rem; letter-spacing:.2em; color:var(--sub); font-weight:normal; margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  #main-text { font-size:clamp(1.8rem,8vw,2.6rem); color:var(--accent); margin:4px 0 8px; word-break:keep-all; }
+  .label { font-size:.8rem; color:var(--sub); }
+  .sub { font-size:.9rem; color:var(--sub); }
+  .alt { font-size:1.2rem; margin:6px 0 0; }
+  button { font:inherit; padding:12px 18px; border-radius:8px; border:1px solid var(--accent);
+    background:var(--accent); color:#fff; cursor:pointer; width:100%; }
+  button.ghost { background:transparent; color:var(--accent); margin-top:8px; }
+  input, select { font:inherit; padding:8px; border-radius:6px; border:1px solid var(--line);
+    background:var(--bg); color:var(--fg); width:100%; margin-top:6px; }
+  .row { display:flex; gap:8px; }
+  details { font-size:.85rem; color:var(--sub); }
+  .warn { color:var(--accent); font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>京都の通り名</h1>
+
+  <div class="card">
+    <div class="label" id="status">「現在地を調べる」を押してください</div>
+    <div id="main-text">—</div>
+    <div class="sub" id="main-sub"></div>
+    <div id="alts"></div>
+    <div class="warn" id="warn"></div>
+  </div>
+
+  <button id="btn-locate">現在地を調べる</button>
+  <button id="btn-watch" class="ghost">歩きながら自動更新する</button>
+
+  <div class="card" style="margin-top:16px">
+    <details>
+      <summary>テスト用に座標を指定する</summary>
+      <select id="presets">
+        <option value="">地点を選ぶ</option>
+        <option value="35.01177,135.76830">京都市役所前(御池通河原町東)</option>
+        <option value="35.00379,135.75930">四条烏丸付近</option>
+        <option value="35.01168,135.75440">御池通と堀川通の間</option>
+      </select>
+      <div class="row">
+        <input id="in-lat" placeholder="緯度 35.0117">
+        <input id="in-lon" placeholder="経度 135.7683">
+      </div>
+      <button id="btn-manual" class="ghost">この座標で調べる</button>
+    </details>
+  </div>
+
+  <div class="sub" style="font-size:.8rem">
+    地図データ © <a href="https://www.openstreetmap.org/copyright" style="color:inherit">OpenStreetMap contributors</a>(ODbL)。通り名の判定は試作で、路地や洛外では不正確なことがあります。
+  </div>
+</main>
+
+<script>
+/* ===== 判定ロジック(DOM非依存) ===== */
+const R_LAT = 110540, R_LON = 111320;
+
+function proj(lat, lon, lat0, lon0) {
+  return [ (lon - lon0) * Math.cos(lat0 * Math.PI / 180) * R_LON, (lat - lat0) * R_LAT ];
+}
+
+const NEAR_M = 400; // 現在地からこの距離以内にかかる区間だけを判定に使う
+
+// streets.json の座標(1e-5度の整数。先頭だけ絶対値、以降は差分)を [{name, pts:[[lat,lon],...]}] に戻す
+function decodeStreets(doc) {
+  const ways = [];
+  for (const st of doc.streets) {
+    for (const w of st.w) {
+      let la = w[0], lo = w[1];
+      const pts = [[la / 1e5, lo / 1e5]];
+      for (let i = 2; i < w.length; i += 2) { la += w[i]; lo += w[i + 1]; pts.push([la / 1e5, lo / 1e5]); }
+      ways.push({ name: st.n, pts });
+    }
+  }
+  return ways;
+}
+
+// 通りの折れ線を、現在地を原点(x=東, y=北, m)とする通り(名前+向き)にまとめる
+function buildStreets(ways, lat0, lon0) {
+  const map = new Map();
+  for (const way of ways) {
+    const nm = way.name;
+    const pts = way.pts.map(([la, lo]) => proj(la, lo, lat0, lon0));
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
+      const dx = bx - ax, dy = by - ay;
+      if (Math.hypot(dx, dy) < 1) continue;
+      if (pointSeg(0, 0, ax, ay, bx, by).d > NEAR_M) continue;
+      const ang = Math.atan2(Math.abs(dx), Math.abs(dy)); // 0=南北, π/2=東西
+      const orient = ang < Math.PI / 6 ? 'NS' : ang > Math.PI / 3 ? 'EW' : null;
+      if (!orient) continue; // 斜めの区間は碁盤の目として扱わない
+      const key = nm + '|' + orient;
+      if (!map.has(key)) map.set(key, { name: nm, orient, segs: [] });
+      map.get(key).segs.push([ax, ay, bx, by]);
+    }
+  }
+  return [...map.values()];
+}
+
+function pointSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  const x = ax + t * dx, y = ay + t * dy;
+  return { d: Math.hypot(px - x, py - y), x, y };
+}
+
+function segInt(s1, s2) {
+  const [x1, y1, x2, y2] = s1, [x3, y3, x4, y4] = s2;
+  const den = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / den;
+  const u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / den;
+  if (t < -0.02 || t > 1.02 || u < -0.02 || u > 1.02) return null;
+  return { x: x1 + t * (x2 - x1), y: y1 + t * (y2 - y1) };
+}
+
+const shortName = n => n.replace(/通$/, '');
+
+function nearestOn(street) {
+  let best = { d: Infinity };
+  for (const s of street.segs) {
+    const r = pointSeg(0, 0, ...s);
+    if (r.d < best.d) best = r;
+  }
+  return best;
+}
+
+// 1本の通りについて「〇〇通 △△上る」形式を作る
+function describe(S, streets) {
+  const np = nearestOn(S);
+  const crosses = [];
+  for (const t of streets) {
+    if (t.orient === S.orient || t.name === S.name) continue;
+    let best = null;
+    for (const s1 of S.segs) for (const s2 of t.segs) {
+      const ip = segInt(s1, s2);
+      if (!ip) continue;
+      const dd = S.orient === 'NS' ? Math.abs(ip.y - np.y) : Math.abs(ip.x - np.x);
+      if (!best || dd < best.dd) best = { ...ip, dd };
+    }
+    if (best) crosses.push({ name: t.name, ...best });
+  }
+  crosses.sort((a, b) => a.dd - b.dd);
+  const base = { street: S.name, orient: S.orient, dist: np.d };
+  const c = crosses[0];
+  if (!c) return { ...base, text: S.name, note: '交差する通りが見つかりません' };
+  let verb;
+  if (S.orient === 'NS') verb = (c.y - np.y) < 0 ? '上る' : '下る';
+  else verb = (c.x - np.x) < 0 ? '東入る' : '西入る';
+  const atCross = c.dd < 15;
+  return {
+    ...base, cross: c.name, crossDist: c.dd, atCross,
+    text: atCross ? `${S.name}${shortName(c.name)}` : `${S.name}${shortName(c.name)}${verb}`
+  };
+}
+
+function analyze(streets) {
+  const ns = streets.filter(s => s.orient === 'NS');
+  const ew = streets.filter(s => s.orient === 'EW');
+  if (!ns.length || !ew.length) return { ok: false };
+  const pick = list => list.map(s => ({ s, d: nearestOn(s).d })).sort((a, b) => a.d - b.d)[0].s;
+  const items = [describe(pick(ns), streets), describe(pick(ew), streets)].sort((a, b) => a.dist - b.dist);
+  const [m, a] = items;
+  const intersection = m.dist < 25 && a.dist < 25;
+  return {
+    ok: true, intersection, items,
+    main: intersection ? `${shortName(m.street)}と${shortName(a.street)}の交差点` : m.text,
+    far: m.dist > 150
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { proj, decodeStreets, buildStreets, analyze, describe };
+
+/* ===== ブラウザ側(データ読み込み・UI) ===== */
+if (typeof document !== 'undefined') {
+  const $ = id => document.getElementById(id);
+  let bounds = null;     // [南, 西, 北, 東]
+  let ways = null;
+  let loading = null;
+  let watchId = null;
+
+  // 内蔵データ(streets.json)を一度だけ読み込む。外部サーバーとは通信しない
+  function loadData() {
+    if (!loading) {
+      loading = fetch('streets.json')
+        .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+        .then(doc => { bounds = doc.bounds; ways = decodeStreets(doc); })
+        .catch(e => { loading = null; throw e; });
+    }
+    return loading;
+  }
+
+  const inBounds = (lat, lon) =>
+    lat >= bounds[0] && lon >= bounds[1] && lat <= bounds[2] && lon <= bounds[3];
+
+  function render(r, lat, lon, acc) {
+    $('alts').innerHTML = '';
+    $('warn').textContent = '';
+    const accTxt = acc ? `(位置の誤差 約${Math.round(acc)}m)` : '';
+    $('status').textContent = `緯度 ${lat.toFixed(5)} / 経度 ${lon.toFixed(5)} ${accTxt}`;
+    if (r.outside) {
+      $('main-text').textContent = '碁盤の目の外です';
+      $('main-sub').textContent = 'このツールが持っている洛中の地図データの範囲外です。';
+      return;
+    }
+    if (!r.ok) {
+      $('main-text').textContent = '碁盤の目の外です';
+      $('main-sub').textContent = '周辺に東西・南北の通りの組が見つかりませんでした。';
+      return;
+    }
+    $('main-text').textContent = r.main;
+    const m = r.items[0];
+    $('main-sub').textContent = r.intersection ? '' :
+      `${m.street}まで約${Math.round(m.dist)}m` + (m.crossDist != null ? ` / ${shortName(m.cross)}まで約${Math.round(m.crossDist)}m` : '');
+    if (!r.intersection) {
+      const a = r.items[1];
+      $('alts').innerHTML = `<div class="label" style="margin-top:12px">別の言い方(${a.street}から見ると)</div><div class="alt">${a.text}${a.atCross ? '(交差点の近く)' : ''}</div>`;
+    }
+    if (r.far) $('warn').textContent = '最寄りの通りまで離れています。碁盤の目の外かもしれません。';
+    else if (acc && acc > 50) $('warn').textContent = '位置の誤差が大きいため、通り名がずれる可能性があります。';
+  }
+
+  async function run(lat, lon, acc) {
+    $('status').textContent = '通りを調べています…';
+    try {
+      await loadData();
+    } catch (e) {
+      $('main-text').textContent = '地図データを読み込めませんでした';
+      $('main-sub').textContent = 'streets.json を取得できません。';
+      $('warn').textContent = e.message + (location.protocol === 'file:' ? ' / ※ファイルを直接開いています。Webサーバー経由で開いてください' : '');
+      $('alts').innerHTML = '';
+      return;
+    }
+    const r = inBounds(lat, lon) ? analyze(buildStreets(ways, lat, lon)) : { ok: false, outside: true };
+    render(r, lat, lon, acc);
+  }
+
+  function locate() {
+    if (!navigator.geolocation) { $('status').textContent = 'この端末では位置情報が使えません'; return; }
+    if (!window.isSecureContext) { $('status').textContent = '位置情報はHTTPSで開いたページでのみ使えます'; return; }
+    $('status').textContent = '位置情報を取得しています…';
+    navigator.geolocation.getCurrentPosition(
+      p => run(p.coords.latitude, p.coords.longitude, p.coords.accuracy),
+      err => { $('status').textContent = '位置情報を取得できませんでした(' + err.message + ')'; },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+  }
+
+  let lastRun = 0;
+  function toggleWatch() {
+    if (watchId != null) {
+      navigator.geolocation.clearWatch(watchId); watchId = null;
+      $('btn-watch').textContent = '歩きながら自動更新する'; return;
+    }
+    $('btn-watch').textContent = '自動更新を止める';
+    watchId = navigator.geolocation.watchPosition(p => {
+      if (Date.now() - lastRun < 5000) return;
+      lastRun = Date.now();
+      run(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+    }, err => { $('status').textContent = '位置情報エラー: ' + err.message; },
+    { enableHighAccuracy: true });
+  }
+
+  loadData().catch(() => {}); // 先に読み込んでおく(失敗は run() 側で表示)
+  $('btn-locate').onclick = locate;
+  $('btn-watch').onclick = toggleWatch;
+  $('presets').onchange = e => {
+    if (!e.target.value) return;
+    const [la, lo] = e.target.value.split(','); $('in-lat').value = la; $('in-lon').value = lo;
+  };
+  $('btn-manual').onclick = () => {
+    const la = parseFloat($('in-lat').value), lo = parseFloat($('in-lon').value);
+    if (isNaN(la) || isNaN(lo)) { $('status').textContent = '緯度・経度を数値で入力してください'; return; }
+    run(la, lo, null);
+  };
+}
+</script>
+</body>
+</html>

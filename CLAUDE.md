@@ -50,3 +50,11 @@ Cloudflare Pages で `master` ブランチを自動デプロイ。
 
 - 記事末尾に「この記事は Claude を活用して書きました。」を記載する
 - ファイル名は `content/posts/YYYY-MM-DD-slug.md` の形式
+
+## 京都の通り名ツール
+
+`static/tools/kyoto-street/` に置いた1枚完結のツール(公開URL: `/tools/kyoto-street/`)。現在地を「黒門通御池上る」の形式で表示する。
+
+- 地図データは外部サーバーに接続せず、同じ場所の `streets.json`(OpenStreetMap 由来、ODbL)を読む
+- `streets.json` は `python3 scripts/kyoto-street/build_streets.py` で作り直す(自分のPCで実行。Overpass API を使う)
+- 範囲は洛中が目安。外は「碁盤の目の外です」を返す
