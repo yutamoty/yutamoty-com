@@ -58,6 +58,7 @@ QUERY_MARGIN = (0.004, 0.005)  # 範囲の外側にこれだけ余分に取る(�
 R_LAT, R_LON = 110540, 111320
 
 NAME_RE = re.compile(r"(通|小路|大路)$")
+UNSAFE_RE = re.compile(r"[<>&\"'`\\\x00-\x1f]")  # HTML や制御に使われる文字を含む名前は採用しない(OSMは誰でも編集できる)
 LOOSE_RE = "通|小路|大路"   # 表記ゆれの確認用に、名前のどこかに含む道路まで広く取る
 
 
@@ -245,7 +246,7 @@ def process(elements, bounds):
         if not raw:
             continue
         name = normalize(raw)
-        if not NAME_RE.search(name):
+        if not NAME_RE.search(name) or UNSAFE_RE.search(name):
             rejected[raw] = rejected.get(raw, 0) + 1
             continue
         pts = [(g["lat"], g["lon"]) for g in el["geometry"]]

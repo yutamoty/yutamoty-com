@@ -199,9 +199,11 @@ if (typeof document !== 'undefined') {
     for (const it of r.items) {
       const st = list.find(x => x.name === it.street && x.orient === it.orient);
       if (!st) continue;
+      const tip = document.createElement('span'); // Leaflet は文字列を HTML として扱うので、要素で渡す
+      tip.textContent = it.street;
       L.polyline(st.segs.map(([ax, ay, bx, by]) => [unproj(ax, ay, lat, lon), unproj(bx, by, lat, lon)]),
         { color: LINE_COLORS[it.orient], weight: 5, opacity: 0.75 })
-        .bindTooltip(it.street, { sticky: true }).addTo(lines);
+        .bindTooltip(tip, { sticky: true }).addTo(lines);
     }
   }
 
@@ -226,7 +228,14 @@ if (typeof document !== 'undefined') {
       `${m.street}まで約${Math.round(m.dist)}m` + (m.crossDist != null ? ` / ${shortName(m.cross)}まで約${Math.round(m.crossDist)}m` : '');
     if (!r.intersection) {
       const a = r.items[1];
-      $('alts').innerHTML = `<div class="street-label street-alts-label">別の言い方(${a.street}から見ると)</div><div class="street-alt">${a.text}${a.atCross ? '(交差点の近く)' : ''}</div>`;
+      // 通り名は外部(OSM)のデータ由来なので、HTML としては解釈させず textContent で入れる
+      const lab = document.createElement('div');
+      lab.className = 'street-label street-alts-label';
+      lab.textContent = `別の言い方(${a.street}から見ると)`;
+      const alt = document.createElement('div');
+      alt.className = 'street-alt';
+      alt.textContent = `${a.text}${a.atCross ? '(交差点の近く)' : ''}`;
+      $('alts').append(lab, alt);
     }
     if (r.far) $('warn').textContent = '最寄りの通りまで離れています。碁盤の目の外かもしれません。';
     else if (acc && acc > 50) $('warn').textContent = '位置の誤差が大きいため、通り名がずれる可能性があります。';
