@@ -3,3 +3,6 @@ resources/_gen/
 .hugo_build.lock
 .DS_Store
 Thumbs.db
+
+# 京都の通り名ツール: Overpass の取得キャッシュ
+scripts/kyoto-street/.cache/

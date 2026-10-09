@@ -10,6 +10,9 @@ static/tools/kyoto-street/streets.json に保存する。
 
   python3 scripts/kyoto-street/build_streets.py --north 35.031 --south 34.980 --west 135.730 --east 135.774
 
+混雑で失敗したときは、待たずに同じコマンドをもう一度実行すればよい(取得済みのタイルは
+scripts/kyoto-street/.cache/ に保存してあり、続きから取る)。取り直したいときは .cache を消す。
+
 すでに取得した Overpass の応答(JSON)がある場合は、通信せずに加工だけできる。
 
   python3 scripts/kyoto-street/build_streets.py --input overpass.json
@@ -32,16 +35,20 @@ import datetime
 import json
 import math
 import re
+import ssl
 import sys
 import time
 import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.openstreetmap.jp/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 USER_AGENT = "yutamoty-com-kyoto-street/1.0 (https://yutamoty.com/)"
 
@@ -63,37 +70,100 @@ def normalize(name):
     return n
 
 
-def build_query(s, w, n, e):
-    ms, mw = QUERY_MARGIN
-    bbox = "%f,%f,%f,%f" % (s - ms, w - mw, n + ms, e + mw)
+def build_query(box):
+    """1タイル分の問い合わせ。box は (南, 西, 北, 東)。"""
+    bbox = "%f,%f,%f,%f" % box
     return (
-        "[out:json][timeout:240];("
+        "[out:json][timeout:90];("
         'way["highway"]["name"~"%s"](%s);'
         'way["highway"]["name:ja"~"%s"](%s);'
-        ");out geom;" % (LOOSE_RE, bbox, LOOSE_RE, bbox)
+        ");out tags geom qt;" % (LOOSE_RE, bbox, LOOSE_RE, bbox)
     )
 
 
-def fetch(query):
+def make_tiles(bounds, rows, cols):
+    """範囲(余白込み)を rows x cols のタイルに分ける。小さな問い合わせにして時間切れを避ける。"""
+    s, w, n, e = bounds
+    ms, mw = QUERY_MARGIN
+    s, w, n, e = s - ms, w - mw, n + ms, e + mw
+    tiles = []
+    for i in range(rows):
+        for j in range(cols):
+            tiles.append((s + (n - s) * i / rows, w + (e - w) * j / cols,
+                          s + (n - s) * (i + 1) / rows, w + (e - w) * (j + 1) / cols))
+    return tiles
+
+
+def is_cert_error(ex):
+    reason = getattr(ex, "reason", ex)
+    return isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(reason)
+
+
+def fetch_tile(query, endpoints, dead, wait, max_attempts):
+    """1タイルを取得する。混雑(429/504など)なら待って再試行し、接続先を順に替える。
+    証明書が合わない接続先は検証を外さずに候補から外す。"""
     last = None
-    for ep in ENDPOINTS:
-        print("取得中:", ep, file=sys.stderr)
+    for attempt in range(max_attempts):
+        live = [ep for ep in endpoints if ep not in dead]
+        if not live:
+            break
+        ep = live[attempt % len(live)]
+        host = urllib.parse.urlparse(ep).netloc
         req = urllib.request.Request(
             ep,
             data=("data=" + urllib.parse.quote(query)).encode(),
             headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=300) as res:
+            with urllib.request.urlopen(req, timeout=150) as res:
                 data = json.loads(res.read().decode("utf-8"))
             if "elements" not in data:
                 raise ValueError("elements がない応答")
+            if "runtime error" in str(data.get("remark", "")):
+                raise ValueError("サーバー側の時間切れ/メモリ不足: %s" % data["remark"])
             return data
-        except Exception as ex:  # noqa: BLE001 - 次の接続先へ回すため広く受ける
+        except urllib.error.HTTPError as ex:
             last = ex
-            print("  失敗: %s(30秒待って次へ)" % ex, file=sys.stderr)
-            time.sleep(30)
-    raise SystemExit("どの接続先でも取得できませんでした: %s" % last)
+            if ex.code == 400:
+                raise SystemExit("問い合わせが不正でした(HTTP 400): %s" % ex)
+            delay = min(wait * (2 ** attempt), 120)
+            print("  %s: HTTP %s(%d秒待って再試行)" % (host, ex.code, delay), file=sys.stderr)
+        except Exception as ex:  # noqa: BLE001 - 次の接続先・再試行へ回すため広く受ける
+            last = ex
+            if is_cert_error(ex):
+                dead.add(ep)
+                print("  %s: 証明書が合わないため、この接続先は使いません" % host, file=sys.stderr)
+                continue
+            delay = min(wait * (2 ** attempt), 120)
+            print("  %s: %s(%d秒待って再試行)" % (host, ex, delay), file=sys.stderr)
+        time.sleep(delay)
+    raise SystemExit("取得できませんでした: %s\n時間をおいて、同じコマンドをもう一度実行してください(取得済みの分は保存してあり、続きから取ります)。" % last)
+
+
+def fetch_all(bounds, args):
+    """タイルごとに取得して結合する。取得済みのタイルは cache-dir から読み、再実行で続きから進める。"""
+    cache = Path(args.cache_dir)
+    cache.mkdir(parents=True, exist_ok=True)
+    endpoints = args.endpoint or ENDPOINTS
+    tiles = make_tiles(bounds, args.rows, args.cols)
+    dead, seen, elements = set(), set(), []
+    for k, box in enumerate(tiles, 1):
+        f = cache / ("%.4f_%.4f_%.4f_%.4f.json" % box)
+        if f.exists():
+            data = json.loads(f.read_text(encoding="utf-8"))
+            print("タイル %d/%d: 保存済みを使用" % (k, len(tiles)), file=sys.stderr)
+        else:
+            print("タイル %d/%d を取得中" % (k, len(tiles)), file=sys.stderr)
+            data = fetch_tile(build_query(box), endpoints, dead, args.wait, args.attempts)
+            f.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            time.sleep(args.pause)  # 相手に負荷をかけないよう、続けて投げない
+        for el in data["elements"]:
+            key = (el.get("type"), el.get("id"))
+            if el.get("id") is not None and key in seen:
+                continue  # 複数のタイルにまたがる道路は一度だけ
+            seen.add(key)
+            elements.append(el)
+    return {"elements": elements}
 
 
 def to_xy(lat, lon, lat0, lon0):
@@ -194,6 +264,13 @@ def main():
     ap.add_argument("--east", type=float, default=135.774, help="東端の経度(既定: 鴨川・川端通あたり)")
     ap.add_argument("--input", help="取得済みの Overpass 応答(JSON)。指定すると通信しない")
     ap.add_argument("--output", default="static/tools/kyoto-street/streets.json")
+    ap.add_argument("--rows", type=int, default=4, help="範囲を南北に分ける数(既定: 4)")
+    ap.add_argument("--cols", type=int, default=3, help="範囲を東西に分ける数(既定: 3)")
+    ap.add_argument("--endpoint", action="append", help="Overpass の接続先(複数指定可)。省略すると既定の候補を順に使う")
+    ap.add_argument("--cache-dir", default=str(Path(__file__).resolve().parent / ".cache"), help="タイルごとの取得結果の保存先")
+    ap.add_argument("--wait", type=float, default=10, help="混雑時の待ち時間の基準(秒)。再試行のたびに倍にする")
+    ap.add_argument("--attempts", type=int, default=6, help="1タイルあたりの試行回数の上限")
+    ap.add_argument("--pause", type=float, default=2, help="タイルの間にあける時間(秒)")
     args = ap.parse_args()
 
     bounds = (args.south, args.west, args.north, args.east)
@@ -201,7 +278,7 @@ def main():
         with open(args.input, encoding="utf-8") as f:
             data = json.load(f)
     else:
-        data = fetch(build_query(*bounds))
+        data = fetch_all(bounds, args)
     print("取得した道路(way): %d 本" % len(data["elements"]), file=sys.stderr)
 
     streets, rejected = process(data["elements"], bounds)
