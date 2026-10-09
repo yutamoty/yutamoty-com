@@ -1,72 +1,3 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>京都の通り名</title>
-<style>
-  :root { --bg:#faf8f4; --fg:#2b2622; --sub:#7a6f66; --card:#fff; --line:#e4ddd3; --accent:#9a2f2f; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#1c1a18; --fg:#ece6dd; --sub:#9b9188; --card:#262320; --line:#3a3530; --accent:#e07b73; }
-  }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg);
-    font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; line-height:1.6; }
-  main { max-width:560px; margin:0 auto; padding:24px 16px 48px; }
-  h1 { font-size:1.1rem; letter-spacing:.2em; color:var(--sub); font-weight:normal; margin:0 0 20px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
-  #main-text { font-size:clamp(1.8rem,8vw,2.6rem); color:var(--accent); margin:4px 0 8px; word-break:keep-all; }
-  .label { font-size:.8rem; color:var(--sub); }
-  .sub { font-size:.9rem; color:var(--sub); }
-  .alt { font-size:1.2rem; margin:6px 0 0; }
-  button { font:inherit; padding:12px 18px; border-radius:8px; border:1px solid var(--accent);
-    background:var(--accent); color:#fff; cursor:pointer; width:100%; }
-  button.ghost { background:transparent; color:var(--accent); margin-top:8px; }
-  input, select { font:inherit; padding:8px; border-radius:6px; border:1px solid var(--line);
-    background:var(--bg); color:var(--fg); width:100%; margin-top:6px; }
-  .row { display:flex; gap:8px; }
-  details { font-size:.85rem; color:var(--sub); }
-  .warn { color:var(--accent); font-size:.9rem; }
-</style>
-</head>
-<body>
-<main>
-  <h1>京都の通り名</h1>
-
-  <div class="card">
-    <div class="label" id="status">現在地を調べています…</div>
-    <div id="main-text">—</div>
-    <div class="sub" id="main-sub"></div>
-    <div id="alts"></div>
-    <div class="warn" id="warn"></div>
-  </div>
-
-  <button id="btn-locate">もう一度調べる</button>
-  <button id="btn-watch" class="ghost">歩きながら自動更新する</button>
-
-  <div class="card" style="margin-top:16px">
-    <details>
-      <summary>テスト用に座標を指定する</summary>
-      <select id="presets">
-        <option value="">地点を選ぶ</option>
-        <option value="35.01177,135.76830">京都市役所前(御池通河原町東)</option>
-        <option value="35.00379,135.75930">四条烏丸付近</option>
-        <option value="35.01168,135.75440">御池通と堀川通の間</option>
-      </select>
-      <div class="row">
-        <input id="in-lat" placeholder="緯度 35.0117">
-        <input id="in-lon" placeholder="経度 135.7683">
-      </div>
-      <button id="btn-manual" class="ghost">この座標で調べる</button>
-    </details>
-  </div>
-
-  <div class="sub" style="font-size:.8rem">
-    地図データ © <a href="https://www.openstreetmap.org/copyright" style="color:inherit">OpenStreetMap contributors</a>(ODbL)。通り名の判定は試作で、路地や洛外では不正確なことがあります。
-  </div>
-</main>
-
-<script>
 /* ===== 判定ロジック(DOM非依存) ===== */
 const R_LAT = 110540, R_LON = 111320;
 
@@ -197,7 +128,7 @@ if (typeof document !== 'undefined') {
   // 内蔵データ(streets.json)を一度だけ読み込む。外部サーバーとは通信しない
   function loadData() {
     if (!loading) {
-      loading = fetch('streets.json')
+      loading = fetch(document.getElementById('street-app').dataset.src)
         .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
         .then(doc => { bounds = doc.bounds; ways = decodeStreets(doc); })
         .catch(e => { loading = null; throw e; });
@@ -229,7 +160,7 @@ if (typeof document !== 'undefined') {
       `${m.street}まで約${Math.round(m.dist)}m` + (m.crossDist != null ? ` / ${shortName(m.cross)}まで約${Math.round(m.crossDist)}m` : '');
     if (!r.intersection) {
       const a = r.items[1];
-      $('alts').innerHTML = `<div class="label" style="margin-top:12px">別の言い方(${a.street}から見ると)</div><div class="alt">${a.text}${a.atCross ? '(交差点の近く)' : ''}</div>`;
+      $('alts').innerHTML = `<div class="street-label street-alts-label">別の言い方(${a.street}から見ると)</div><div class="street-alt">${a.text}${a.atCross ? '(交差点の近く)' : ''}</div>`;
     }
     if (r.far) $('warn').textContent = '最寄りの通りまで離れています。碁盤の目の外かもしれません。';
     else if (acc && acc > 50) $('warn').textContent = '位置の誤差が大きいため、通り名がずれる可能性があります。';
@@ -294,6 +225,3 @@ if (typeof document !== 'undefined') {
     run(la, lo, null);
   };
 }
-</script>
-</body>
-</html>

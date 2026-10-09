@@ -212,3 +212,109 @@ body {
     gap: 0.2rem;
   }
 }
+
+/* Tool: 京都の通り名 */
+.street-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin: 1rem 0;
+}
+
+.street-label {
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.street-main {
+  font-size: clamp(1.75rem, 8vw, 2.5rem);
+  font-weight: 700;
+  color: #111;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  margin: 0.4rem 0;
+  word-break: keep-all;
+}
+
+.street-sub {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.street-alts-label {
+  margin-top: 0.8rem;
+}
+
+.street-alt {
+  font-size: 1.15rem;
+  color: #333;
+}
+
+.street-warn {
+  color: #b35900;
+  font-size: 0.9rem;
+}
+
+.street-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.street-btn {
+  font: inherit;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: 1px solid #0969da;
+  border-radius: 6px;
+  background: #0969da;
+  color: #fff;
+  cursor: pointer;
+}
+
+.street-btn-ghost {
+  background: transparent;
+  color: #0969da;
+}
+
+.street-test {
+  margin: 1.5rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.street-test summary {
+  cursor: pointer;
+}
+
+.street-test select,
+.street-test input {
+  font: inherit;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+}
+
+.street-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.street-test .street-btn {
+  margin-top: 0.5rem;
+}
+
+.street-note {
+  color: #999;
+  font-size: 0.8rem;
+}
+
+.street-note a {
+  color: inherit;
+  text-decoration: underline;
+}

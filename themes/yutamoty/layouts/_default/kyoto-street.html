@@ -1,0 +1,39 @@
+{{ define "main" }}
+<h1 class="page-title">{{ .Title }}</h1>
+{{ .Content }}
+
+<div id="street-app" data-src="{{ "tools/kyoto-street/streets.json" | relURL }}">
+  <section class="street-card">
+    <p class="street-label" id="status">現在地を調べています…</p>
+    <p class="street-main" id="main-text">—</p>
+    <p class="street-sub" id="main-sub"></p>
+    <div id="alts"></div>
+    <p class="street-warn" id="warn"></p>
+  </section>
+
+  <div class="street-buttons">
+    <button type="button" class="street-btn" id="btn-locate">もう一度調べる</button>
+    <button type="button" class="street-btn street-btn-ghost" id="btn-watch">歩きながら自動更新する</button>
+  </div>
+
+  <details class="street-test">
+    <summary>テスト用に座標を指定する</summary>
+    <select id="presets">
+      <option value="">地点を選ぶ</option>
+      <option value="35.01177,135.76830">京都市役所前(御池通河原町東)</option>
+      <option value="35.00379,135.75930">四条烏丸付近</option>
+      <option value="35.01168,135.75440">御池通と堀川通の間</option>
+    </select>
+    <div class="street-row">
+      <input id="in-lat" placeholder="緯度 35.0117">
+      <input id="in-lon" placeholder="経度 135.7683">
+    </div>
+    <button type="button" class="street-btn street-btn-ghost" id="btn-manual">この座標で調べる</button>
+  </details>
+
+  <p class="street-note">
+    地図データ © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>(ODbL)。通り名の判定は試作で、路地や洛外では不正確なことがあります。
+  </p>
+</div>
+<script src="{{ "tools/kyoto-street/kyoto-street.js" | relURL }}"></script>
+{{ end }}
