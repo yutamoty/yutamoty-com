@@ -44,5 +44,5 @@
   </p>
 </div>
 <script src="{{ "tools/kyoto-street/leaflet/leaflet.js" | relURL }}"></script>
-<script src="{{ "tools/kyoto-street/kyoto-street.js" | relURL }}"></script>
+<script src="{{ "tools/kyoto-street/kyoto-street.js" | relURL }}?v={{ readFile "static/tools/kyoto-street/kyoto-street.js" | md5 }}"></script>
 {{ end }}
