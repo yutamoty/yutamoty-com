@@ -234,7 +234,7 @@ if (typeof document !== 'undefined') {
       lab.textContent = `別の言い方(${a.street}から見ると)`;
       const alt = document.createElement('div');
       alt.className = 'street-alt';
-      alt.textContent = `${a.text}${a.atCross ? '(交差点の近く)' : ''}`;
+      alt.textContent = a.text;
       $('alts').append(lab, alt);
     }
     if (r.far) $('warn').textContent = '最寄りの通りまで離れています。碁盤の目の外かもしれません。';
