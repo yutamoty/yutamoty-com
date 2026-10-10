@@ -251,6 +251,16 @@ body {
   color: #333;
 }
 
+[data-copy] {
+  cursor: pointer;
+}
+
+.street-copied {
+  color: #1a7f37;
+  font-size: 0.85rem;
+  min-height: 1.3em;
+}
+
 .street-warn {
   color: #b35900;
   font-size: 0.9rem;

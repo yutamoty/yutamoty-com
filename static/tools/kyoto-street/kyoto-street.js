@@ -124,6 +124,47 @@ if (typeof document !== 'undefined') {
   let ways = null;
   let loading = null;
   let watchId = null;
+  let copiedTimer = null;
+
+  // 通り名をタップ(クリック)でコピーできるようにする。text が空ならコピー対象から外す
+  function setCopyable(el, text) {
+    if (text) {
+      el.dataset.copy = text;
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.title = 'クリックでコピー';
+    } else {
+      delete el.dataset.copy;
+      el.removeAttribute('tabindex');
+      el.removeAttribute('role');
+      el.removeAttribute('title');
+    }
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) { /* HTTP や古いブラウザでは下の方法に切り替える */ }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { /* 失敗は下で表示 */ }
+    ta.remove();
+    return ok;
+  }
+
+  async function onCopy(el) {
+    const text = el.dataset.copy;
+    if (!text) return;
+    const ok = await copyText(text);
+    $('copied').textContent = ok ? `コピーしました: ${text}` : 'コピーできませんでした';
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { $('copied').textContent = ''; }, 2000);
+  }
 
   // 内蔵データ(streets.json)を一度だけ読み込む。外部サーバーとは通信しない
   function loadData() {
@@ -210,6 +251,7 @@ if (typeof document !== 'undefined') {
   function render(r, lat, lon, acc) {
     $('alts').innerHTML = '';
     $('warn').textContent = '';
+    setCopyable($('main-text'), null);
     const accTxt = acc ? `(位置の誤差 約${Math.round(acc)}m)` : '';
     $('status').textContent = `緯度 ${lat.toFixed(5)} / 経度 ${lon.toFixed(5)} ${accTxt}`;
     if (r.outside) {
@@ -223,6 +265,7 @@ if (typeof document !== 'undefined') {
       return;
     }
     $('main-text').textContent = r.main;
+    setCopyable($('main-text'), r.main);
     const m = r.items[0];
     $('main-sub').textContent = r.intersection ? '' :
       `${m.street}まで約${Math.round(m.dist)}m` + (m.crossDist != null ? ` / ${shortName(m.cross)}まで約${Math.round(m.crossDist)}m` : '');
@@ -235,6 +278,7 @@ if (typeof document !== 'undefined') {
       const alt = document.createElement('div');
       alt.className = 'street-alt';
       alt.textContent = a.text;
+      setCopyable(alt, a.text);
       $('alts').append(lab, alt);
     }
     if (r.far) $('warn').textContent = '最寄りの通りまで離れています。碁盤の目の外かもしれません。';
@@ -247,6 +291,7 @@ if (typeof document !== 'undefined') {
       await loadData();
     } catch (e) {
       $('main-text').textContent = '地図データを読み込めませんでした';
+      setCopyable($('main-text'), null);
       $('main-sub').textContent = 'streets.json を取得できません。';
       $('warn').textContent = e.message + (location.protocol === 'file:' ? ' / ※ファイルを直接開いています。Webサーバー経由で開いてください' : '');
       $('alts').innerHTML = '';
@@ -268,6 +313,7 @@ if (typeof document !== 'undefined') {
       err => {
         $('status').textContent = '位置情報を取得できませんでした(' + err.message + ')';
         $('main-text').textContent = '—';
+        setCopyable($('main-text'), null);
         $('main-sub').textContent = err.code === 1 ? '位置情報の許可が必要です。ブラウザの設定で許可してから「もう一度調べる」を押すか、地図をタップして場所を指定してください。' : '「もう一度調べる」を押すと再試行します。地図をタップして場所を指定することもできます。';
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
@@ -288,6 +334,16 @@ if (typeof document !== 'undefined') {
     }, err => { $('status').textContent = '位置情報エラー: ' + err.message; },
     { enableHighAccuracy: true });
   }
+
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-copy]');
+    if (el) onCopy(el);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest && e.target.closest('[data-copy]');
+    if (el) { e.preventDefault(); onCopy(el); }
+  });
 
   initMap();
   loadData().then(initDataLayers).catch(() => {}); // 先に読み込んでおく(失敗は run() 側で表示)
