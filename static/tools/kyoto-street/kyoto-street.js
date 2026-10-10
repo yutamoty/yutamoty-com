@@ -110,7 +110,7 @@ function analyze(streets) {
   const intersection = m.dist < 25 && a.dist < 25;
   return {
     ok: true, intersection, items,
-    main: intersection ? `${shortName(m.street)}と${shortName(a.street)}の交差点` : m.text,
+    main: intersection ? items.slice().sort((x, y) => (x.orient === 'NS' ? -1 : 1) - (y.orient === 'NS' ? -1 : 1)).map(i => shortName(i.street)).join('') : m.text,
     far: m.dist > 150
   };
 }
