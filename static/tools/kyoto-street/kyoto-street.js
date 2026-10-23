@@ -102,9 +102,17 @@ function describe(S, streets) {
 
 // 交差点名は基本「縦(南北)→横(東西)」(烏丸御池、河原町丸太町)。
 // ただし四条は東西の通りが先(四条河原町、四条烏丸)。西大路だけは逆で「西大路四条」。
+// 通り名の順から外れる、決まった呼び方の交差点。[南北, 東西, 呼び名]
+const ALIASES = [
+  ['大宮通', '五条通', '五条大宮'],
+  ['川端通', '三条通', '三条京阪']
+];
+
 function intersectionName(items) {
   const ns = items.find(i => i.orient === 'NS');
   const ew = items.find(i => i.orient === 'EW');
+  const alias = ALIASES.find(([n, e]) => n === ns.street && e === ew.street);
+  if (alias) return alias[2];
   const shijoFirst = ew.street === '四条通' && ns.street !== '西大路通';
   const order = shijoFirst ? [ew, ns] : [ns, ew];
   return order.map(i => shortName(i.street)).join('');
