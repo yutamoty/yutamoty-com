@@ -100,6 +100,16 @@ function describe(S, streets) {
   };
 }
 
+// 交差点名は基本「縦(南北)→横(東西)」(烏丸御池、河原町丸太町)。
+// ただし四条は東西の通りが先(四条河原町、四条烏丸)。西大路だけは逆で「西大路四条」。
+function intersectionName(items) {
+  const ns = items.find(i => i.orient === 'NS');
+  const ew = items.find(i => i.orient === 'EW');
+  const shijoFirst = ew.street === '四条通' && ns.street !== '西大路通';
+  const order = shijoFirst ? [ew, ns] : [ns, ew];
+  return order.map(i => shortName(i.street)).join('');
+}
+
 function analyze(streets) {
   const ns = streets.filter(s => s.orient === 'NS');
   const ew = streets.filter(s => s.orient === 'EW');
@@ -110,12 +120,12 @@ function analyze(streets) {
   const intersection = m.dist < 25 && a.dist < 25;
   return {
     ok: true, intersection, items,
-    main: intersection ? items.slice().sort((x, y) => (x.orient === 'NS' ? -1 : 1) - (y.orient === 'NS' ? -1 : 1)).map(i => shortName(i.street)).join('') : m.text,
+    main: intersection ? intersectionName(items) : m.text,
     far: m.dist > 150
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { proj, decodeStreets, buildStreets, analyze, describe };
+if (typeof module !== 'undefined') module.exports = { proj, decodeStreets, buildStreets, analyze, describe, intersectionName };
 
 /* ===== ブラウザ側(データ読み込み・UI) ===== */
 if (typeof document !== 'undefined') {
