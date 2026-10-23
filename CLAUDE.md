@@ -59,6 +59,7 @@ Cloudflare Pages で `master` ブランチを自動デプロイ。
 - スクリプト: `static/tools/kyoto-street/kyoto-street.js`(判定ロジックと画面の動き)
 - 地図データは外部サーバーに接続せず、同じ場所の `streets.json`(OpenStreetMap 由来、ODbL)を読む
 - `streets.json` は `python3 scripts/kyoto-street/build_streets.py` で作り直す(自分のPCで実行。Overpass API を使う。範囲をタイルに分けて取得し、混雑で失敗したら同じコマンドを再実行すれば続きから取る)
+- 交差点名は基本「縦→横」(烏丸御池)。四条は東西が先(四条河原町)、西大路四条のみ逆。五条大宮・三条京阪は `ALIASES`(kyoto-street.js)で呼び名を固定
 - 範囲は洛中が目安。外は「碁盤の目の外です」を返す
 - 地図は Leaflet(`static/tools/kyoto-street/leaflet/` に同梱、CDN は使わない)+ 国土地理院の標準地図タイル。外部へ出る通信はタイル画像の取得だけ
 - 地図のタップ・ピンのドラッグでその場所の通り名を表示し、判定に使った南北(青)・東西(赤)の通りを線で重ねる
